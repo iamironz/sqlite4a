@@ -1,0 +1,12 @@
+debug:
+  script:
+    - ./gradlew clean assemble
+  except:
+    - /^v.*$/
+
+bintray:
+  script:
+    - ./gradlew clean assembleRelease
+    - ./gradlew publishMavenAndroidPublicationToMavenLocal bintrayUpload
+  only:
+    - /^v.*$/

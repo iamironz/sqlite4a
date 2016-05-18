@@ -1,0 +1,131 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.3"
+
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 23
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner 'android.support.test.runner.AndroidJUnitRunner'
+    }
+
+    sourceSets.debug.jniLibs.srcDir 'build/sqlite3x/libs/debug'
+    sourceSets.release.jniLibs.srcDir 'build/sqlite3x/libs/release'
+
+    buildTypes {
+        debug {
+            testCoverageEnabled = true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_7
+        targetCompatibility = JavaVersion.VERSION_1_7
+    }
+}
+
+dependencies {
+    compile 'com.android.support:support-annotations:23.4.0'
+    compile 'com.getkeepsafe.relinker:relinker:1.2.1'
+    androidTestCompile 'com.android.support.test.espresso:espresso-core:2.2.2'
+    androidTestCompile 'com.android.support.test:runner:0.5'
+    androidTestCompile 'com.android.support.test:rules:0.5'
+}
+
+def getNdkDir() {
+    if (System.env.ANDROID_NDK_HOME != null) {
+        return System.env.ANDROID_NDK_HOME
+    }
+    return project.plugins.findPlugin('com.android.library').sdkHandler.getNdkFolder()
+}
+
+def getToolchainDir() {
+    if (System.env.ANDROID_TOOLCHAIN_DIR != null) {
+        return System.env.ANDROID_TOOLCHAIN_DIR
+    }
+    return properties['toolchainDir'] ?: "${rootDir}/.toolchain"
+}
+
+[
+        [
+                'name'     : 'armv7',
+                'abi'      : 'armeabi-v7a',
+                'platform' : 'android-16',
+                'toolchain': 'arm-linux-androideabi-clang'
+        ],
+        [
+                'name'     : 'armv8',
+                'abi'      : 'arm64-v8a',
+                'platform' : 'android-21',
+                'toolchain': 'aarch64-linux-android-clang'
+        ],
+        [
+                'name'     : 'x86',
+                'abi'      : 'x86',
+                'platform' : 'android-16',
+                'toolchain': 'x86-clang'
+        ]
+].each { variant ->
+    def ndkDir = getNdkDir()
+    def toolchainDir = getToolchainDir()
+    def makeStandaloneToolchain = project.tasks.create("makeStandaloneToolchain${variant.name.capitalize()}", Exec) {
+        commandLine = [
+                "${ndkDir}/build/tools/make-standalone-toolchain.sh",
+                "--install-dir=${toolchainDir}/${variant.abi}",
+                "--platform=${variant.platform}",
+                "--toolchain=${variant.toolchain}"
+        ]
+        group 'Build Setup'
+        description "Make standalone ${variant.abi} toolchain"
+    }
+    android.buildTypes.all { buildType ->
+        def taskVariant = "${variant.name.capitalize()}${buildType.name.capitalize()}"
+        project.tasks.create("cmakeJniLibs${taskVariant}", Exec) {
+            workingDir "${rootDir}/sqlite3x"
+            commandLine = [
+                    "cmake",
+                    "-H${workingDir}",
+                    "-B${project.buildDir}/sqlite3x/build/${buildType.name}/${variant.abi}",
+                    "-DCMAKE_TOOLCHAIN_FILE=${workingDir}/android.cmake",
+                    "-DCMAKE_BUILD_TYPE=${buildType.name.capitalize()}",
+                    "-DCMAKE_INSTALL_PREFIX=${project.buildDir}/sqlite3x/libs/${buildType.name}/${variant.abi}",
+                    "-DANDROID_TOOLCHAIN=${toolchainDir}/${variant.abi}",
+                    "-DANDROID_ABI=${variant.abi}"
+            ]
+            group 'Build Setup'
+            description "Cmake ${variant.abi}"
+            if (!file("${toolchainDir}/${variant.abi}").exists()) {
+                dependsOn makeStandaloneToolchain
+            }
+        }
+        project.tasks.create("makeJniLibs${taskVariant}", Exec) {
+            workingDir "${project.buildDir}/sqlite3x/build/${buildType.name}/${variant.abi}"
+            commandLine = ['make', 'install', '-j4']
+            group 'Build'
+            description "Make ${variant.abi} ${buildType.name} library"
+            dependsOn tasks.getByPath("cmakeJniLibs${taskVariant}")
+        }
+    }
+}
+
+afterEvaluate {
+    tasks.withType(JavaCompile) { compileJava ->
+        if (compileJava.name.contains("Release")) {
+            compileJava.dependsOn tasks.findAll { it.name.startsWith("makeJniLibs") && it.name.endsWith("Release") }
+        } else {
+            compileJava.dependsOn tasks.findAll { it.name.startsWith("makeJniLibs") && it.name.endsWith("Debug") }
+        }
+    }
+}
+
+apply from: 'jacoco.gradle'
+if (project.hasProperty('bintrayUser')) {
+    apply from: 'bintray.gradle'
+}

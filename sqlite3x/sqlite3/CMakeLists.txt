@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.5)
+project(sqlite3)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Android")
+    add_definitions(-D__ANDROID__)
+endif ()
+
+add_definitions(
+        -DHAVE_USLEEP=1
+        -DSQLITE_HAVE_ISNAN
+        -DSQLITE_DEFAULT_JOURNAL_SIZE_LIMIT=1048576
+        -DSQLITE_THREADSAFE=2
+        -DSQLITE_TEMP_STORE=3
+        -DSQLITE_POWERSAFE_OVERWRITE=1
+        -DSQLITE_DEFAULT_AUTOVACUUM=1
+        -DSQLITE_ENABLE_MEMORY_MANAGEMENT=1
+        -DSQLITE_ENABLE_FTS5
+        -DSQLITE_ENABLE_JSON1
+        -DSQLITE_OMIT_BUILTIN_TEST
+        -DSQLITE_OMIT_COMPILEOPTION_DIAGS
+        -DSQLITE_DEFAULT_FILE_PERMISSIONS=0600
+)
+
+set(HEADERS sqlite3.h)
+set(SOURCES sqlite3.c)
+
+add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
+target_link_libraries(${PROJECT_NAME} m)

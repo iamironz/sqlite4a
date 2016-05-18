@@ -1,0 +1,22 @@
+apply plugin: 'jacoco'
+
+task jacocoTestReport(type: JacocoReport, dependsOn: 'connectedCheck') {
+    group = 'Reporting'
+    description = 'Generate Jacoco coverage reports after running tests.'
+    reports {
+        xml {
+            enabled = true
+            destination = "${project.buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+        }
+    }
+    jacocoClasspath = project.configurations['androidJacocoAnt']
+    sourceDirectories = fileTree(dir: "${project.projectDir}/src/main/java")
+    classDirectories = fileTree(dir: "${project.buildDir}/intermediates/classes/debug", excludes: [
+            '**/R.class',
+            '**/R$*.class',
+            '**/BuildConfig.*',
+            '**/Manifest*.*',
+            '**/*Test*.*'
+    ])
+    executionData = fileTree(dir: project.buildDir, includes: ['**/*.exec', '**/*.ec'])
+}

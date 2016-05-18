@@ -1,0 +1,42 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:2.1.0'
+        classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.6'
+    }
+}
+
+allprojects {
+    repositories {
+        jcenter()
+    }
+}
+
+ext {
+    versionName = gitReleaseTag
+    versionCode = gitVersionCode
+}
+
+String getGitReleaseTag() {
+    def tag = 'git describe --tags'.execute().text.trim()
+    if (tag =~ /^v.*$/) {
+        return tag.substring(1)
+    }
+    return '3.12.2-SNAPSHOT'
+}
+
+int getGitVersionCode() {
+    def versionCode = 1
+    (versionName =~ /(\d+)/).collect {
+        Integer.parseInt(it[0] as String)
+    }.eachWithIndex { num, index ->
+        versionCode += (num * (100000 / Math.pow(100, index)))
+    }
+    return versionCode
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.13'
+}
